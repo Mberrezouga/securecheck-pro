@@ -12,7 +12,7 @@ A professional security check application for cybersecurity consultants. Run com
 - **Detailed Results Dashboard**: Security score gauge, severity distribution pie chart, category bar chart, and detailed findings
 - **PDF Export**: Professional PDF reports with all findings and recommendations
 - **Dark/Light Theme**: Toggle between themes with cyberpunk aesthetic
-- **Copyright**: © 2024 Malek Berrezouga
+- **Copyright**: © 2026 Malek Berrezouga
 
 ## Tech Stack
 - **Frontend**: React, TanStack Query, Wouter, Tailwind CSS, shadcn/ui, Recharts
@@ -92,4 +92,4 @@ To save a copy of your project locally:
 - Added detailed educational content for each security check type
 - Added Recharts for data visualization (pie chart, bar chart, score gauge)
 - Added smooth animations and transitions
-- Added copyright footer: © 2024 Malek Berrezouga
+- Added copyright footer: © 2026 Malek Berrezouga

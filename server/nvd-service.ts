@@ -85,12 +85,78 @@ function getCvssScore(item: NvdCveItem): number | undefined {
   return undefined;
 }
 
+// Parse version string to comparable format
+function parseVersion(version: string): number[] {
+  return version.split(/[.\-_]/).map(part => {
+    const num = parseInt(part, 10);
+    return isNaN(num) ? 0 : num;
+  });
+}
+
+// Compare two version strings: returns positive if v1 > v2, negative if v1 < v2, 0 if equal
+function compareVersions(v1: string, v2: string): number {
+  const parts1 = parseVersion(v1);
+  const parts2 = parseVersion(v2);
+  const maxLen = Math.max(parts1.length, parts2.length);
+  
+  for (let i = 0; i < maxLen; i++) {
+    const p1 = parts1[i] || 0;
+    const p2 = parts2[i] || 0;
+    if (p1 !== p2) return p1 - p2;
+  }
+  return 0;
+}
+
+// Extract the minimum secure version from CVE data
+function extractSecureVersion(vulnerabilities: NvdCveItem[], currentVersion: string): string | null {
+  const fixedVersions: string[] = [];
+  
+  for (const item of vulnerabilities) {
+    const configs = item.cve.configurations || [];
+    for (const config of configs) {
+      const nodes = config.nodes || [];
+      for (const node of nodes) {
+        const matches = node.cpeMatch || [];
+        for (const match of matches) {
+          // versionEndExcluding means the vulnerability is fixed in this version
+          if (match.versionEndExcluding) {
+            fixedVersions.push(match.versionEndExcluding);
+          }
+        }
+      }
+    }
+  }
+  
+  if (fixedVersions.length === 0) return null;
+  
+  // Find the highest fixed version (most recent patch)
+  const sortedVersions = fixedVersions.sort((a, b) => compareVersions(b, a));
+  const highestFixedVersion = sortedVersions[0];
+  
+  // Only return if the secure version is higher than current version
+  if (compareVersions(highestFixedVersion, currentVersion) > 0) {
+    return highestFixedVersion;
+  }
+  
+  // If current version is already at or above the highest fix, find next major version
+  const currentParts = parseVersion(currentVersion);
+  if (currentParts.length > 0) {
+    // Suggest next patch version
+    const nextVersion = [...currentParts];
+    nextVersion[nextVersion.length - 1] += 1;
+    return nextVersion.join('.');
+  }
+  
+  return null;
+}
+
 export async function fetchCvesForTechnology(tech: Technology): Promise<{
   cves: CveRecord[];
   topCves: CveRecord[];
   totalCount: number;
   criticalCount: number;
   highCount: number;
+  secureVersion: string | null;
 }> {
   try {
     // Build CPE query - search by keyword (vendor + product name)
@@ -104,7 +170,7 @@ export async function fetchCvesForTechnology(tech: Technology): Promise<{
     if (!response.ok) {
       if (response.status === 429) {
         console.warn(`Rate limited by NVD API for ${tech.name}`);
-        return { cves: [], topCves: [], totalCount: 0, criticalCount: 0, highCount: 0 };
+        return { cves: [], topCves: [], totalCount: 0, criticalCount: 0, highCount: 0, secureVersion: null };
       }
       throw new Error(`NVD API error: ${response.status}`);
     }
@@ -132,7 +198,10 @@ export async function fetchCvesForTechnology(tech: Technology): Promise<{
       })
       .slice(0, 5);
     
-    console.log(`Found ${data.totalResults} CVEs for ${tech.name} (${criticalCount} critical, ${highCount} high)`);
+    // Determine secure version from CVE fix data
+    const secureVersion = extractSecureVersion(data.vulnerabilities, tech.currentVersion);
+    
+    console.log(`Found ${data.totalResults} CVEs for ${tech.name} (${criticalCount} critical, ${highCount} high)${secureVersion ? `, secure version: ${secureVersion}` : ''}`);
     
     return {
       cves,
@@ -140,10 +209,11 @@ export async function fetchCvesForTechnology(tech: Technology): Promise<{
       totalCount: data.totalResults,
       criticalCount,
       highCount,
+      secureVersion,
     };
   } catch (error) {
     console.error(`Error fetching CVEs for ${tech.name}:`, error);
-    return { cves: [], topCves: [], totalCount: 0, criticalCount: 0, highCount: 0 };
+    return { cves: [], topCves: [], totalCount: 0, criticalCount: 0, highCount: 0, secureVersion: null };
   }
 }
 
@@ -178,7 +248,7 @@ export async function checkAllTechnologies(
       // Mark as checking
       await updateTechnology(tech.id, { status: "checking" });
       
-      const { totalCount, criticalCount, highCount, topCves } = await fetchCvesForTechnology(tech);
+      const { totalCount, criticalCount, highCount, topCves, secureVersion } = await fetchCvesForTechnology(tech);
       
       const status = determineSecurityStatus(totalCount, criticalCount, highCount);
       
@@ -187,6 +257,7 @@ export async function checkAllTechnologies(
         criticalCount,
         highCount,
         topCves,
+        secureVersion,
         status,
         lastCheckedAt: new Date(),
       });
@@ -206,7 +277,7 @@ export async function checkSingleTechnology(
 ): Promise<Technology | undefined> {
   await updateTechnology(tech.id, { status: "checking" });
   
-  const { totalCount, criticalCount, highCount, topCves } = await fetchCvesForTechnology(tech);
+  const { totalCount, criticalCount, highCount, topCves, secureVersion } = await fetchCvesForTechnology(tech);
   
   const status = determineSecurityStatus(totalCount, criticalCount, highCount);
   
@@ -215,6 +286,7 @@ export async function checkSingleTechnology(
     criticalCount,
     highCount,
     topCves,
+    secureVersion,
     status,
     lastCheckedAt: new Date(),
   });

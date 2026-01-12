@@ -212,7 +212,7 @@ export default function Home() {
               <span>Powered by industry-standard security checks</span>
               <span className="text-primary">|</span>
               <span className="font-medium" data-testid="text-copyright">
-                © 2024 Malek Berrezouga. All rights reserved.
+                © 2026 Malek Berrezouga. All rights reserved.
               </span>
             </div>
           </div>

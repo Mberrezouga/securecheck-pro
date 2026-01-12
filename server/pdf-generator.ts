@@ -7,12 +7,12 @@ interface jsPDFWithAutoTable extends jsPDF {
   lastAutoTable: { finalY: number };
 }
 
-const severityColors: Record<Severity, [number, number, number]> = {
-  critical: [220, 38, 38],
-  high: [234, 88, 12],
-  medium: [202, 138, 4],
-  low: [37, 99, 235],
-  info: [107, 114, 128],
+const severityColors: Record<string, [number, number, number]> = {
+  CRITICAL: [220, 38, 38],
+  HIGH: [234, 88, 12],
+  MEDIUM: [202, 138, 4],
+  LOW: [37, 99, 235],
+  UNKNOWN: [107, 114, 128],
 };
 
 export function generatePdfReport(
@@ -70,11 +70,11 @@ export function generatePdfReport(
   // Summary Section
   const summary: ScanSummary = {
     totalFindings: findings.length,
-    criticalCount: findings.filter((f) => f.severity === "critical").length,
-    highCount: findings.filter((f) => f.severity === "high").length,
-    mediumCount: findings.filter((f) => f.severity === "medium").length,
-    lowCount: findings.filter((f) => f.severity === "low").length,
-    infoCount: findings.filter((f) => f.severity === "info").length,
+    criticalCount: findings.filter((f) => f.severity === "CRITICAL").length,
+    highCount: findings.filter((f) => f.severity === "HIGH").length,
+    mediumCount: findings.filter((f) => f.severity === "MEDIUM").length,
+    lowCount: findings.filter((f) => f.severity === "LOW").length,
+    infoCount: findings.filter((f) => f.severity === "UNKNOWN").length,
     overallScore: scan.overallScore || 0,
   };
 
@@ -102,11 +102,11 @@ export function generatePdfReport(
   doc.setTextColor(0, 0, 0);
   
   const summaryItems = [
-    { label: "Total Findings:", value: summary.totalFindings, color: [0, 0, 0] },
-    { label: "Critical:", value: summary.criticalCount, color: severityColors.critical },
-    { label: "High:", value: summary.highCount, color: severityColors.high },
-    { label: "Medium:", value: summary.mediumCount, color: severityColors.medium },
-    { label: "Low:", value: summary.lowCount, color: severityColors.low },
+    { label: "Total Findings:", value: summary.totalFindings, color: [0, 0, 0] as [number, number, number] },
+    { label: "Critical:", value: summary.criticalCount, color: severityColors.CRITICAL },
+    { label: "High:", value: summary.highCount, color: severityColors.HIGH },
+    { label: "Medium:", value: summary.mediumCount, color: severityColors.MEDIUM },
+    { label: "Low:", value: summary.lowCount, color: severityColors.LOW },
   ];
 
   let summaryY = yPos + 5;
@@ -129,7 +129,7 @@ export function generatePdfReport(
     doc.text("Detailed Findings", margin, yPos);
     yPos += 8;
 
-    const severityOrder: Severity[] = ["critical", "high", "medium", "low", "info"];
+    const severityOrder = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"];
     const sortedFindings = [...findings].sort(
       (a, b) => severityOrder.indexOf(a.severity) - severityOrder.indexOf(b.severity)
     );
@@ -158,8 +158,8 @@ export function generatePdfReport(
       },
       didParseCell: (data) => {
         if (data.section === "body" && data.column.index === 1) {
-          const severity = data.cell.raw?.toString().toLowerCase() as Severity;
-          if (severityColors[severity]) {
+          const severity = data.cell.raw?.toString().toUpperCase();
+          if (severity && severityColors[severity]) {
             data.cell.styles.textColor = severityColors[severity];
             data.cell.styles.fontStyle = "bold";
           }
@@ -172,7 +172,7 @@ export function generatePdfReport(
 
   // Detailed Findings
   if (findings.length > 0) {
-    const severityOrder: Severity[] = ["critical", "high", "medium", "low", "info"];
+    const severityOrder = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"];
     const sortedFindings = [...findings].sort(
       (a, b) => severityOrder.indexOf(a.severity) - severityOrder.indexOf(b.severity)
     );
@@ -189,8 +189,9 @@ export function generatePdfReport(
       // Finding header
       doc.setFontSize(11);
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(...severityColors[finding.severity]);
-      doc.text(`[${finding.severity.toUpperCase()}] ${finding.title}`, margin, yPos);
+      const findingColor = severityColors[finding.severity] || severityColors.UNKNOWN;
+      doc.setTextColor(findingColor[0], findingColor[1], findingColor[2]);
+      doc.text(`[${finding.severity}] ${finding.title}`, margin, yPos);
       yPos += 7;
 
       // Description
