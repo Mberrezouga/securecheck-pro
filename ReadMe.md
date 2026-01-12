@@ -88,4 +88,4 @@ The application runs on port 5000 using `npm run dev`.
 - Added detailed educational content for each security check type
 - Added Recharts for data visualization (pie chart, bar chart, score gauge)
 - Added smooth animations and transitions
-- Added copyright footer: © 2024 Malek Berrezouga
+- Added copyright footer: © 2026 Malek Berrezouga
