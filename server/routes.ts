@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertSecurityScanSchema, insertTechnologySchema } from "@shared/schema";
+import { insertScanSchema, insertTechnologySchema } from "@shared/schema";
 import { generateFindings, calculateSecurityScore } from "./security-checks";
 import { generatePdfReport } from "./pdf-generator";
 import { checkAllTechnologies, checkSingleTechnology } from "./nvd-service";
@@ -46,7 +46,7 @@ export async function registerRoutes(
   // Create a new scan
   app.post("/api/scans", async (req, res) => {
     try {
-      const parseResult = insertSecurityScanSchema.safeParse(req.body);
+      const parseResult = insertScanSchema.safeParse(req.body);
       if (!parseResult.success) {
         return res.status(400).json({ 
           error: "Validation failed", 

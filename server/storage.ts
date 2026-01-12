@@ -1,26 +1,26 @@
-import { randomUUID } from "crypto";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { db } from "./db";
 import { 
   technologies,
+  scans,
+  findings,
   type Technology,
   type InsertTechnology,
-} from "@shared/schema";
-import type { 
-  SecurityScan, 
-  InsertSecurityScan, 
-  SecurityFinding, 
-  InsertSecurityFinding,
+  type SecurityScan,
+  type InsertSecurityScan,
+  type SecurityFinding,
+  type InsertSecurityFinding,
+  type ScanConfig,
 } from "@shared/schema";
 
 export interface IStorage {
-  // Scans (in-memory)
+  // Scans (database)
   createScan(scan: InsertSecurityScan): Promise<SecurityScan>;
   getScan(id: string): Promise<SecurityScan | undefined>;
   getAllScans(): Promise<SecurityScan[]>;
   updateScan(id: string, updates: Partial<SecurityScan>): Promise<SecurityScan | undefined>;
   
-  // Findings (in-memory)
+  // Findings (database)
   createFinding(finding: InsertSecurityFinding): Promise<SecurityFinding>;
   getFindings(scanId: string): Promise<SecurityFinding[]>;
   
@@ -57,65 +57,98 @@ const defaultTechnologies: InsertTechnology[] = [
   { name: "Ruby on Rails", vendor: "rubyonrails", category: "Backend", cpe: "cpe:2.3:a:rubyonrails:rails", currentVersion: "7.1.2", status: "unknown", vulnerabilityCount: 0, criticalCount: 0, highCount: 0 },
 ];
 
+// Helper to convert DB row to SecurityScan type
+function toSecurityScan(row: typeof scans.$inferSelect): SecurityScan {
+  return {
+    id: row.id,
+    target: row.target,
+    status: row.status,
+    configuration: row.configuration as ScanConfig,
+    initiatedAt: row.initiatedAt?.toISOString() || new Date().toISOString(),
+    completedAt: row.completedAt?.toISOString(),
+    overallScore: row.overallScore ?? undefined,
+    consultantName: row.consultantName ?? undefined,
+    clientName: row.clientName ?? undefined,
+    projectName: row.projectName ?? undefined,
+  };
+}
+
+// Helper to convert DB row to SecurityFinding type
+function toSecurityFinding(row: typeof findings.$inferSelect): SecurityFinding {
+  return {
+    id: row.id,
+    scanId: row.scanId,
+    category: row.category,
+    severity: row.severity,
+    title: row.title,
+    description: row.description,
+    evidence: row.evidence ?? undefined,
+    recommendation: row.recommendation,
+    affectedResource: row.affectedResource,
+    referenceLinks: row.referenceLinks ?? undefined,
+    complianceTags: row.complianceTags ?? undefined,
+  };
+}
+
 export class DatabaseStorage implements IStorage {
-  private scans: Map<string, SecurityScan>;
-  private findings: Map<string, SecurityFinding[]>;
-
-  constructor() {
-    this.scans = new Map();
-    this.findings = new Map();
-  }
-
-  // Scans (in-memory)
+  // Scans (database)
   async createScan(insertScan: InsertSecurityScan): Promise<SecurityScan> {
-    const id = randomUUID();
-    const scan: SecurityScan = {
-      id,
+    const [newScan] = await db.insert(scans).values({
       target: insertScan.target,
-      status: "pending",
       configuration: insertScan.configuration,
-      initiatedAt: new Date().toISOString(),
       consultantName: insertScan.consultantName,
       clientName: insertScan.clientName,
       projectName: insertScan.projectName,
-    };
-    this.scans.set(id, scan);
-    this.findings.set(id, []);
-    return scan;
+    }).returning();
+    return toSecurityScan(newScan);
   }
 
   async getScan(id: string): Promise<SecurityScan | undefined> {
-    return this.scans.get(id);
+    const [scan] = await db.select().from(scans).where(eq(scans.id, id));
+    return scan ? toSecurityScan(scan) : undefined;
   }
 
   async getAllScans(): Promise<SecurityScan[]> {
-    return Array.from(this.scans.values()).sort(
-      (a, b) => new Date(b.initiatedAt).getTime() - new Date(a.initiatedAt).getTime()
-    );
+    const allScans = await db.select().from(scans).orderBy(desc(scans.initiatedAt));
+    return allScans.map(toSecurityScan);
   }
 
   async updateScan(id: string, updates: Partial<SecurityScan>): Promise<SecurityScan | undefined> {
-    const scan = this.scans.get(id);
-    if (!scan) return undefined;
+    const updateData: Partial<typeof scans.$inferInsert> = {};
     
-    const updatedScan = { ...scan, ...updates };
-    this.scans.set(id, updatedScan);
-    return updatedScan;
+    if (updates.status !== undefined) updateData.status = updates.status;
+    if (updates.overallScore !== undefined) updateData.overallScore = updates.overallScore;
+    if (updates.completedAt !== undefined) updateData.completedAt = new Date(updates.completedAt);
+    if (updates.configuration !== undefined) updateData.configuration = updates.configuration;
+    
+    const [updated] = await db
+      .update(scans)
+      .set(updateData)
+      .where(eq(scans.id, id))
+      .returning();
+    return updated ? toSecurityScan(updated) : undefined;
   }
 
+  // Findings (database)
   async createFinding(finding: InsertSecurityFinding): Promise<SecurityFinding> {
-    const id = randomUUID();
-    const newFinding: SecurityFinding = { ...finding, id };
-    
-    const scanFindings = this.findings.get(finding.scanId) || [];
-    scanFindings.push(newFinding);
-    this.findings.set(finding.scanId, scanFindings);
-    
-    return newFinding;
+    const [newFinding] = await db.insert(findings).values({
+      scanId: finding.scanId,
+      category: finding.category,
+      severity: finding.severity,
+      title: finding.title,
+      description: finding.description,
+      evidence: finding.evidence,
+      recommendation: finding.recommendation,
+      affectedResource: finding.affectedResource,
+      referenceLinks: finding.referenceLinks,
+      complianceTags: finding.complianceTags,
+    }).returning();
+    return toSecurityFinding(newFinding);
   }
 
   async getFindings(scanId: string): Promise<SecurityFinding[]> {
-    return this.findings.get(scanId) || [];
+    const scanFindings = await db.select().from(findings).where(eq(findings.scanId, scanId));
+    return scanFindings.map(toSecurityFinding);
   }
 
   // Technologies (database)
@@ -143,7 +176,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTechnology(id: string): Promise<boolean> {
-    const result = await db.delete(technologies).where(eq(technologies.id, id));
+    await db.delete(technologies).where(eq(technologies.id, id));
     return true;
   }
 

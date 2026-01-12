@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { insertSecurityScanSchema, type InsertSecurityScan, type CheckType, checkTypeInfo } from "@shared/schema";
+import { insertScanSchema, type InsertSecurityScan, type CheckType, checkTypeInfo } from "@shared/schema";
 
 const checkTypeIcons: Record<CheckType, React.ReactNode> = {
   ssl_tls: <Lock className="h-5 w-5" />,
@@ -144,7 +144,7 @@ export function SecurityScanForm({ onScanStarted }: SecurityScanFormProps) {
   const queryClient = useQueryClient();
 
   const form = useForm<InsertSecurityScan>({
-    resolver: zodResolver(insertSecurityScanSchema),
+    resolver: zodResolver(insertScanSchema),
     defaultValues: {
       target: "",
       consultantName: "",

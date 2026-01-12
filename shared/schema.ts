@@ -64,59 +64,76 @@ export const checkTypeEnum = z.enum([
 ]);
 export type CheckType = z.infer<typeof checkTypeEnum>;
 
-// Security finding schema
-export const securityFindingSchema = z.object({
-  id: z.string(),
-  scanId: z.string(),
-  category: checkTypeEnum,
-  severity: severityEnum,
-  title: z.string(),
-  description: z.string(),
-  evidence: z.string().optional(),
-  recommendation: z.string(),
-  affectedResource: z.string(),
-  referenceLinks: z.array(z.string()).optional(),
-  complianceTags: z.array(z.string()).optional(),
-});
-
-export type SecurityFinding = z.infer<typeof securityFindingSchema>;
-export type InsertSecurityFinding = Omit<SecurityFinding, "id">;
-
-// Scan configuration schema
+// Scan configuration schema (for JSONB storage)
 export const scanConfigSchema = z.object({
   checkTypes: z.array(checkTypeEnum).min(1, "Select at least one check type"),
   scanDepth: z.enum(["quick", "standard", "deep"]),
   notes: z.string().optional(),
 });
-
 export type ScanConfig = z.infer<typeof scanConfigSchema>;
 
-// Security scan request schema
-export const securityScanSchema = z.object({
-  id: z.string(),
-  target: z.string().min(1, "Target is required"),
-  status: scanStatusEnum,
-  configuration: scanConfigSchema,
-  initiatedAt: z.string(),
-  completedAt: z.string().optional(),
-  overallScore: z.number().min(0).max(100).optional(),
-  consultantName: z.string().optional(),
-  clientName: z.string().optional(),
-  projectName: z.string().optional(),
+// Security scans table (Drizzle ORM)
+export const scans = pgTable("scans", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  target: text("target").notNull(),
+  status: text("status").notNull().default("pending"),
+  configuration: jsonb("configuration").$type<ScanConfig>().notNull(),
+  initiatedAt: timestamp("initiated_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+  overallScore: integer("overall_score"),
+  consultantName: text("consultant_name"),
+  clientName: text("client_name"),
+  projectName: text("project_name"),
 });
 
-export type SecurityScan = z.infer<typeof securityScanSchema>;
-
-// Insert schema for creating new scans
-export const insertSecurityScanSchema = z.object({
-  target: z.string().url("Please enter a valid URL").or(z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z]{2,})+$/, "Please enter a valid domain")),
-  configuration: scanConfigSchema,
-  consultantName: z.string().optional(),
-  clientName: z.string().optional(),
-  projectName: z.string().optional(),
+// Security findings table (Drizzle ORM)
+export const findings = pgTable("findings", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  scanId: varchar("scan_id", { length: 36 }).notNull(),
+  category: text("category").notNull(),
+  severity: text("severity").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  evidence: text("evidence"),
+  recommendation: text("recommendation").notNull(),
+  affectedResource: text("affected_resource").notNull(),
+  referenceLinks: jsonb("reference_links").$type<string[]>(),
+  complianceTags: jsonb("compliance_tags").$type<string[]>(),
 });
 
-export type InsertSecurityScan = z.infer<typeof insertSecurityScanSchema>;
+export const insertScanSchema = createInsertSchema(scans).omit({ id: true, initiatedAt: true });
+export const insertFindingSchema = createInsertSchema(findings).omit({ id: true });
+
+// Types from database tables
+export type SecurityScan = {
+  id: string;
+  target: string;
+  status: string;
+  configuration: ScanConfig;
+  initiatedAt: string;
+  completedAt?: string;
+  overallScore?: number;
+  consultantName?: string;
+  clientName?: string;
+  projectName?: string;
+};
+
+export type SecurityFinding = {
+  id: string;
+  scanId: string;
+  category: string;
+  severity: string;
+  title: string;
+  description: string;
+  evidence?: string;
+  recommendation: string;
+  affectedResource: string;
+  referenceLinks?: string[];
+  complianceTags?: string[];
+};
+
+export type InsertSecurityScan = z.infer<typeof insertScanSchema>;
+export type InsertSecurityFinding = z.infer<typeof insertFindingSchema>;
 
 // Summary stats for dashboard
 export interface ScanSummary {
