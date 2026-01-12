@@ -65,15 +65,11 @@ shared/
 The application runs on port 5000 using `npm run dev`.
 
 ## Deployment Instructions
-1. **Replit Deployment**: Click the "Publish" button in Replit to deploy your app to a public URL
-2. **Local Development**: Run `npm run dev` to start the development server on port 5000
-3. **Production Build**: Run `npm run build` to create a production build, then `npm start` to serve
+1. **Local Development**: Run `npm run dev` to start the development server on port 5000
+2. **Production Build**: Run `npm run build` to create a production build, then `npm start` to serve
 
 ## Saving Locally
-To save a copy of your project locally:
-1. Click the three dots menu in Replit
-2. Select "Download as ZIP" to get all project files
-3. Extract and run `npm install` followed by `npm run dev`
+1. Extract and run `npm install` followed by `npm run dev`
 
 ## Data Models
 - **SecurityScan**: Target, status, configuration, timestamps, score
